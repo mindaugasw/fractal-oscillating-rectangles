@@ -1,0 +1,140 @@
+glsl struct NextRect {
+    vec2 start;
+    vec2 end;
+    bool horzLine; // If true, rectangle will be divided into next 2 by a horizontal line.
+};
+
+glsl vec4 drawLine
+(vec2 position, vec2 start, vec2 end, int depth, float sinTime);
+glsl float sinCustom(float x);
+glsl float sinCustom(float x, float treshold);
+glsl float transformToRange(float x, float oldMin, float oldMax, float newMin, float newMax);
+
+const vec4 ORANGE = vec4(1.0, 0.5, 0.0, 1.0);
+const vec4 WHITE = vec4(0.9);
+const vec4 BLACK = vec4(0.0, 0.0, 0.0, 1.0);
+const vec2 CENTER = vec2(0.5, 0.5);
+
+param float lineWidth = 0.01;
+param float tresholdGlobal = 0.1;
+param float amplitudeOffset = 3.0;
+param float maxDepth = 8;
+param vec4 colorBG = ORANGE : color;
+
+
+
+glsl vec4 myShader(vec2 position, float time) {
+    NextRect[8] queue;
+
+    //float sinWave = ((sin(time) + 1.0) / 2.0) * 0.6 + 0.2;
+    
+    /*if (position.y > sinWave - lineWidth * 0.5 && position.y < sinWave + lineWidth * 0.5)
+        return BLACK;
+    else
+        return WHITE;*/
+    
+
+    /*float calc = drawLine
+    (position, vec2(0.1), vec2(0.5), 1, time);
+    if (calc < 0)
+        return colorBG;
+    else
+        return vec4(calc, calc, calc, 1.0);*/
+
+
+    // 4 squares
+    /*if (position.x < 0.5) {
+        if (position.y < 0.5) {
+            return drawLine
+            (position, vec2(0.0, 0.0), vec2(0.5, 0.5), -1, time); // Bottom left
+        } else {
+            return drawLine
+            (position, vec2(0.0, 0.5), vec2(0.5, 1.0), -1, time); // Bottom right
+        }
+    } else {
+        if (position.y < 0.5) {
+            return drawLine
+            (position, vec2(0.5, 0.0), vec2(1.0, 0.5), -1, time); // Top left
+        } else {
+            return drawLine
+            (position, vec2(0.5, 0.5), vec2(1.0, 1.0), -1, time); // Top right
+        }
+    }*/
+
+    // Full 1 square
+    //return drawLine(position, vec2(0.0), vec2(1.0), -1, time);
+
+    // 2 divided vert |
+    if (position.x < 0.5)
+        return drawLine(position, vec2(0.0, 0.0), vec2(0.5, 1.0), -1, time);
+    else
+        return drawLine(position, vec2(0.5, 0.0), vec2(1.0, 1.0), -1, time + amplitudeOffset);
+}
+
+/* Calculates color for one specified rectangle/split i.e. 2 rectangles and
+ * a line splitting them.
+ *
+ * Parameters:
+ * position - pixel position
+ * start - bottom left corner of square to do calculations inside
+ * end - top right corner of square to do calculations inside
+ * depth - recursion level
+ *
+ * Returns:
+ * ORANGE if position is not inside given square
+ * BLACK if position is on line
+ * WHITE otherwise
+ */
+glsl vec4 drawLine(vec2 position, vec2 start, vec2 end, int depth, float time) {
+    if (position.x < start.x || position.y < start.y || position.x > end.x || position.y > end.y) {
+        // Not in the square
+        return ORANGE;        
+    } else {
+        // In the square
+        //return 0.0;
+        float widthLocal = end.y - start.y;
+        float tresholdLocal = widthLocal * tresholdGlobal;
+        float sinLocal = transformToRange(
+            sinCustom(time), 0.0, 1.0, start.y + tresholdLocal, end.y - tresholdLocal);
+
+
+        if (position.y > sinLocal - lineWidth * 0.5 && position.y < sinLocal + lineWidth * 0.5)
+            return BLACK;
+        
+        return WHITE;
+
+    }
+
+    // and then draw inside of each 4 squares...
+
+    // 2 DIMENSIONAL ARRAYS!!! Each call fills array of squares to draw inside of it, if depth is not max!
+    // Each call returns sizes for 2 smaller calls
+    //     A structure:
+    //      end pos, start pos, direction, current color
+}
+
+/* A sine wave function that returns positive only wave, between [0.0, 1.0], 
+ * adjusted for specified treshold. Treshold specifies difference between min
+ * and max values.
+ * For example, with a treshold of 0.8, values returned will be between [0.1, 0.9]
+ */
+glsl float sinCustom(float x, float treshold) {
+    return ((sin(x) + 1.0) / 2.0) * treshold + (1 - treshold) / 2;
+}
+glsl float sinCustom(float x) {
+    return (sin(x) + 1.0) / 2.0;
+}
+/* Transforms value from one range to a different range. For example, can
+ * be use to transform a sinCustom result between [0.1, 0.9] to new range
+ * between [0.632, 0.815].
+ */
+glsl float transformToRange(float x, float oldMin, float oldMax, float newMin, float newMax) {   
+    /* Formula:
+     * y = (x - a) * ((d - c) / (b - a)) + c
+     * when converting x from [a, b] to [c, d]
+     */
+    return (x - oldMin) * ((newMax - newMin) / (oldMax - oldMin)) + newMin;
+}
+
+animation FractalOscillatingRectangles= glsl(myShader, 256, 256);
+
