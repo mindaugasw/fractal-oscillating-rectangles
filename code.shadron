@@ -2,10 +2,11 @@ glsl struct NextRect {
     vec2 start;
     vec2 end;
     bool horzLine; // If true, rectangle will be divided into next 2 by a horizontal line.
+    float timeOffset;
+    int depth;
 };
 
-glsl vec4 drawLine
-(vec2 position, vec2 start, vec2 end, int depth, float sinTime);
+glsl vec4 drawLine(vec2 position, vec2 start, vec2 end, int depth, float sinTime);
 glsl float sinCustom(float x);
 glsl float sinCustom(float x, float treshold);
 glsl float transformToRange(float x, float oldMin, float oldMax, float newMin, float newMax);
@@ -13,7 +14,6 @@ glsl float transformToRange(float x, float oldMin, float oldMax, float newMin, f
 const vec4 ORANGE = vec4(1.0, 0.5, 0.0, 1.0);
 const vec4 WHITE = vec4(0.9);
 const vec4 BLACK = vec4(0.0, 0.0, 0.0, 1.0);
-const vec2 CENTER = vec2(0.5, 0.5);
 
 param float lineWidth = 0.01;
 param float tresholdGlobal = 0.1;
@@ -21,25 +21,15 @@ param float amplitudeOffset = 3.0;
 param float maxDepth = 8;
 param vec4 colorBG = ORANGE : color;
 
-
-
 glsl vec4 myShader(vec2 position, float time) {
-    NextRect[8] queue;
+    NextRect[10] queue;
+    queue[0] = NextRect(vec2(0.0), vec2(1.0), false, 0.0, -1);
 
-    //float sinWave = ((sin(time) + 1.0) / 2.0) * 0.6 + 0.2;
-    
-    /*if (position.y > sinWave - lineWidth * 0.5 && position.y < sinWave + lineWidth * 0.5)
-        return BLACK;
-    else
-        return WHITE;*/
-    
+    // From the queue
+    for (int i = 0; i < 1; i++) {
+        return drawLine(position, queue[i].start, queue[i].end, queue[i].depth, time);
+    }
 
-    /*float calc = drawLine
-    (position, vec2(0.1), vec2(0.5), 1, time);
-    if (calc < 0)
-        return colorBG;
-    else
-        return vec4(calc, calc, calc, 1.0);*/
 
 
     // 4 squares
@@ -65,10 +55,10 @@ glsl vec4 myShader(vec2 position, float time) {
     //return drawLine(position, vec2(0.0), vec2(1.0), -1, time);
 
     // 2 divided vert |
-    if (position.x < 0.5)
+    /*if (position.x < 0.5)
         return drawLine(position, vec2(0.0, 0.0), vec2(0.5, 1.0), -1, time);
     else
-        return drawLine(position, vec2(0.5, 0.0), vec2(1.0, 1.0), -1, time + amplitudeOffset);
+        return drawLine(position, vec2(0.5, 0.0), vec2(1.0, 1.0), -1, time + amplitudeOffset);*/
 }
 
 /* Calculates color for one specified rectangle/split i.e. 2 rectangles and
@@ -91,9 +81,9 @@ glsl vec4 drawLine(vec2 position, vec2 start, vec2 end, int depth, float time) {
         return ORANGE;        
     } else {
         // In the square
-        //return 0.0;
-        float widthLocal = end.y - start.y;
-        float tresholdLocal = widthLocal * tresholdGlobal;
+
+//        float widthLocal = end.y - start.y;
+        float tresholdLocal = (end.y - start.y) * tresholdGlobal;
         float sinLocal = transformToRange(
             sinCustom(time), 0.0, 1.0, start.y + tresholdLocal, end.y - tresholdLocal);
 
