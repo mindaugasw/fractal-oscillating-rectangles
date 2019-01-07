@@ -6,7 +6,8 @@ glsl struct NextRect {
     int depth;
 };
 
-glsl vec4 drawLine(vec2 position, vec2 start, vec2 end, int depth, float sinTime);
+//glsl vec4 drawLine(vec2 position, vec2 start, vec2 end, int depth, float sinTime);
+glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRect);
 glsl float sinCustom(float x);
 glsl float sinCustom(float x, float treshold);
 glsl float transformToRange(float x, float oldMin, float oldMax, float newMin, float newMax);
@@ -16,7 +17,7 @@ const vec4 WHITE = vec4(0.9);
 const vec4 BLACK = vec4(0.0, 0.0, 0.0, 1.0);
 
 param float lineWidth = 0.01;
-param float tresholdGlobal = 0.1;
+param float tresholdGlobal = 0.1 : range(0.0, 0.5);
 param float amplitudeOffset = 3.0;
 param float maxDepth = 8;
 param vec4 colorBG = ORANGE : color;
@@ -26,11 +27,14 @@ glsl vec4 myShader(vec2 position, float time) {
     queue[0] = NextRect(vec2(0.0), vec2(1.0), false, 0.0, -1);
 
     // From the queue
-    for (int i = 0; i < 1; i++) {
-        return drawLine(position, queue[i].start, queue[i].end, queue[i].depth, time);
+    for (int i = 0; i < 4; i++) {
+        //return drawLine(position, queue[i].start, queue[i].end, queue[i].depth, time);
+        vec4 val = drawLine(position, queue[i], time, queue[i + 1]);
+        if (val == BLACK)
+            return BLACK;
     }
 
-
+    return WHITE;
 
     // 4 squares
     /*if (position.x < 0.5) {
@@ -75,7 +79,7 @@ glsl vec4 myShader(vec2 position, float time) {
  * BLACK if position is on line
  * WHITE otherwise
  */
-glsl vec4 drawLine(vec2 position, vec2 start, vec2 end, int depth, float time) {
+/*glsl vec4 drawLine(vec2 position, vec2 start, vec2 end, int depth, float time) {
     if (position.x < start.x || position.y < start.y || position.x > end.x || position.y > end.y) {
         // Not in the square
         return ORANGE;        
@@ -92,6 +96,66 @@ glsl vec4 drawLine(vec2 position, vec2 start, vec2 end, int depth, float time) {
             return BLACK;
         
         return WHITE;
+
+    }
+
+    // and then draw inside of each 4 squares...
+
+    // 2 DIMENSIONAL ARRAYS!!! Each call fills array of squares to draw inside of it, if depth is not max!
+    // Each call returns sizes for 2 smaller calls
+    //     A structure:
+    //      end pos, start pos, direction, current color
+}*/
+
+glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRect) {
+    // REMOVE CHECKING IF INSIDE
+    if (position.x < rect.start.x || position.y < rect.start.y || position.x > rect.end.x || position.y > rect.end.y) {
+        // Not in the square
+        return ORANGE;        
+    } else {
+        // In the square
+
+        if (rect.horzLine) {
+            float tresholdLocal = (rect.end.y - rect.start.y) * tresholdGlobal;
+            float sinLocal = transformToRange(sinCustom(time), 0.0, 1.0, rect.start.y + tresholdLocal, rect.end.y - tresholdLocal);
+
+            /* REPLACE WITH STEP FUNCTION
+            vec2 newStart = vec2(rect.start.x, step(sinLocal, position.y) * rect.start.y*/
+            vec2 newStart, newEnd;
+            if (position.y > sinLocal) { // Top
+                newStart = vec2(rect.start.x, sinLocal);
+                newEnd = vec2(rect.end.x, rect.end.y);
+            } else { // Bottom
+                newStart = vec2(rect.start.x, rect.start.y);
+                newEnd = vec2(rect.end.x, sinLocal);
+            }
+
+            nextRect = NextRect(newStart, newEnd, !rect.horzLine, 1.0 - rect.timeOffset, rect.depth + 1);
+
+            if (position.y > sinLocal - lineWidth * 0.5 && position.y < sinLocal + lineWidth * 0.5)
+                return BLACK;        
+            return WHITE;
+        } else {
+            float tresholdLocal = (rect.end.x - rect.start.x) * tresholdGlobal;
+            float sinLocal = transformToRange(sinCustom(time), 0.0, 1.0, rect.start.x + tresholdLocal, rect.end.x - tresholdLocal);
+
+            /* REPLACE WITH STEP FUNCTION
+            vec2 newStart = vec2(rect.start.x, step(sinLocal, position.y) * rect.start.y*/
+            vec2 newStart, newEnd;
+            if (position.x > sinLocal) { // Right
+                newStart = vec2(sinLocal, rect.start.y);
+                newEnd = vec2(rect.end.x, rect.end.y);
+            } else { // Left
+                newStart = vec2(rect.start.x, rect.start.y);
+                newEnd = vec2(sinLocal, rect.end.y);
+            }
+
+            nextRect = NextRect(newStart, newEnd, !rect.horzLine, 1.0 - rect.timeOffset, rect.depth + 1);
+
+            if (position.x > sinLocal - lineWidth * 0.5 && position.x < sinLocal + lineWidth * 0.5)
+                return BLACK;        
+            return WHITE;
+        }
 
     }
 
