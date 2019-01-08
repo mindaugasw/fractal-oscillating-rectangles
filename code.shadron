@@ -16,18 +16,19 @@ const vec4 ORANGE = vec4(1.0, 0.5, 0.0, 1.0);
 const vec4 WHITE = vec4(0.9);
 const vec4 BLACK = vec4(0.0, 0.0, 0.0, 1.0);
 
-param float lineWidth = 0.01;
+param float lineWidthMax = 0.015;
+//param float lineWidthMin = 0.002;
 param float tresholdGlobal = 0.1 : range(0.0, 0.5);
-param float amplitudeOffset = 3.0;
+param float amplitudeOffset = 3.1; // 3.1 aproximately equals to half sin period
 param float maxDepth = 8;
 param vec4 colorBG = ORANGE : color;
 
 glsl vec4 myShader(vec2 position, float time) {
     NextRect[10] queue;
-    queue[0] = NextRect(vec2(0.0), vec2(1.0), false, 0.0, -1);
+    queue[0] = NextRect(vec2(0.0), vec2(1.0), false, 0.0, 0);
 
     // From the queue
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 8; i++) {
         //return drawLine(position, queue[i].start, queue[i].end, queue[i].depth, time);
         vec4 val = drawLine(position, queue[i], time, queue[i + 1]);
         if (val == BLACK)
@@ -35,34 +36,6 @@ glsl vec4 myShader(vec2 position, float time) {
     }
 
     return WHITE;
-
-    // 4 squares
-    /*if (position.x < 0.5) {
-        if (position.y < 0.5) {
-            return drawLine
-            (position, vec2(0.0, 0.0), vec2(0.5, 0.5), -1, time); // Bottom left
-        } else {
-            return drawLine
-            (position, vec2(0.0, 0.5), vec2(0.5, 1.0), -1, time); // Bottom right
-        }
-    } else {
-        if (position.y < 0.5) {
-            return drawLine
-            (position, vec2(0.5, 0.0), vec2(1.0, 0.5), -1, time); // Top left
-        } else {
-            return drawLine
-            (position, vec2(0.5, 0.5), vec2(1.0, 1.0), -1, time); // Top right
-        }
-    }*/
-
-    // Full 1 square
-    //return drawLine(position, vec2(0.0), vec2(1.0), -1, time);
-
-    // 2 divided vert |
-    /*if (position.x < 0.5)
-        return drawLine(position, vec2(0.0, 0.0), vec2(0.5, 1.0), -1, time);
-    else
-        return drawLine(position, vec2(0.5, 0.0), vec2(1.0, 1.0), -1, time + amplitudeOffset);*/
 }
 
 /* Calculates color for one specified rectangle/split i.e. 2 rectangles and
@@ -70,43 +43,14 @@ glsl vec4 myShader(vec2 position, float time) {
  *
  * Parameters:
  * position - pixel position
- * start - bottom left corner of square to do calculations inside
- * end - top right corner of square to do calculations inside
- * depth - recursion level
+ * rect - NextRect structure, specifiying more parameters for this split: start and end global
+ *        positions, if it's horizontal or vertical split, if timing should be offset, and depth level.
  *
  * Returns:
  * ORANGE if position is not inside given square
  * BLACK if position is on line
  * WHITE otherwise
  */
-/*glsl vec4 drawLine(vec2 position, vec2 start, vec2 end, int depth, float time) {
-    if (position.x < start.x || position.y < start.y || position.x > end.x || position.y > end.y) {
-        // Not in the square
-        return ORANGE;        
-    } else {
-        // In the square
-
-//        float widthLocal = end.y - start.y;
-        float tresholdLocal = (end.y - start.y) * tresholdGlobal;
-        float sinLocal = transformToRange(
-            sinCustom(time), 0.0, 1.0, start.y + tresholdLocal, end.y - tresholdLocal);
-
-
-        if (position.y > sinLocal - lineWidth * 0.5 && position.y < sinLocal + lineWidth * 0.5)
-            return BLACK;
-        
-        return WHITE;
-
-    }
-
-    // and then draw inside of each 4 squares...
-
-    // 2 DIMENSIONAL ARRAYS!!! Each call fills array of squares to draw inside of it, if depth is not max!
-    // Each call returns sizes for 2 smaller calls
-    //     A structure:
-    //      end pos, start pos, direction, current color
-}*/
-
 glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRect) {
     // REMOVE CHECKING IF INSIDE
     if (position.x < rect.start.x || position.y < rect.start.y || position.x > rect.end.x || position.y > rect.end.y) {
@@ -117,42 +61,55 @@ glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRe
 
         if (rect.horzLine) {
             float tresholdLocal = (rect.end.y - rect.start.y) * tresholdGlobal;
-            float sinLocal = transformToRange(sinCustom(time), 0.0, 1.0, rect.start.y + tresholdLocal, rect.end.y - tresholdLocal);
+            float sinLocal = transformToRange(sinCustom(time + amplitudeOffset * rect.timeOffset), 0.0, 1.0, rect.start.y + tresholdLocal, rect.end.y - tresholdLocal);
 
             /* REPLACE WITH STEP FUNCTION
             vec2 newStart = vec2(rect.start.x, step(sinLocal, position.y) * rect.start.y*/
             vec2 newStart, newEnd;
+            float newTimeOffset;
             if (position.y > sinLocal) { // Top
                 newStart = vec2(rect.start.x, sinLocal);
                 newEnd = vec2(rect.end.x, rect.end.y);
+                newTimeOffset = 0.0;
             } else { // Bottom
                 newStart = vec2(rect.start.x, rect.start.y);
                 newEnd = vec2(rect.end.x, sinLocal);
+                newTimeOffset = 1.0;
             }
 
-            nextRect = NextRect(newStart, newEnd, !rect.horzLine, 1.0 - rect.timeOffset, rect.depth + 1);
+            nextRect = NextRect(newStart, newEnd, !rect.horzLine, newTimeOffset, rect.depth + 1);
 
-            if (position.y > sinLocal - lineWidth * 0.5 && position.y < sinLocal + lineWidth * 0.5)
+            //float halfLineLocal = ((lineWidthMax - lineWidthMin) * (1 - rect.depth / maxDepth) * 0.5) + lineWidthMin;
+            float halfLineLocal = lineWidthMax * (1 - rect.depth / maxDepth) * 0.5;
+
+
+            if (position.y > sinLocal - halfLineLocal && position.y < sinLocal + halfLineLocal)
                 return BLACK;        
             return WHITE;
         } else {
             float tresholdLocal = (rect.end.x - rect.start.x) * tresholdGlobal;
-            float sinLocal = transformToRange(sinCustom(time), 0.0, 1.0, rect.start.x + tresholdLocal, rect.end.x - tresholdLocal);
+            float sinLocal = transformToRange(sinCustom(time + amplitudeOffset * rect.timeOffset), 0.0, 1.0, rect.start.x + tresholdLocal, rect.end.x - tresholdLocal);
 
             /* REPLACE WITH STEP FUNCTION
             vec2 newStart = vec2(rect.start.x, step(sinLocal, position.y) * rect.start.y*/
             vec2 newStart, newEnd;
+            float newTimeOffset;
             if (position.x > sinLocal) { // Right
                 newStart = vec2(sinLocal, rect.start.y);
                 newEnd = vec2(rect.end.x, rect.end.y);
+                newTimeOffset = 1.0;
             } else { // Left
                 newStart = vec2(rect.start.x, rect.start.y);
                 newEnd = vec2(sinLocal, rect.end.y);
+                newTimeOffset = 0.0;
             }
 
-            nextRect = NextRect(newStart, newEnd, !rect.horzLine, 1.0 - rect.timeOffset, rect.depth + 1);
+            nextRect = NextRect(newStart, newEnd, !rect.horzLine, newTimeOffset, rect.depth + 1);
 
-            if (position.x > sinLocal - lineWidth * 0.5 && position.x < sinLocal + lineWidth * 0.5)
+            //float halfLineLocal = ((lineWidthMax - lineWidthMin) * (1 - rect.depth / maxDepth) * 0.5) + lineWidthMin;
+            float halfLineLocal = lineWidthMax * (1 - rect.depth / maxDepth) * 0.5;
+
+            if (position.x > sinLocal - halfLineLocal && position.x < sinLocal + halfLineLocal)
                 return BLACK;        
             return WHITE;
         }
@@ -179,8 +136,7 @@ glsl float sinCustom(float x) {
     return (sin(x) + 1.0) / 2.0;
 }
 /* Transforms value from one range to a different range. For example, can
- * be use to transform a sinCustom result between [0.1, 0.9] to new range
- * between [0.632, 0.815].
+ * be used to value varying between [0.5, 1.5] to new range [0.632, 0.815].
  */
 glsl float transformToRange(float x, float oldMin, float oldMax, float newMin, float newMax) {   
     /* Formula:
@@ -190,5 +146,5 @@ glsl float transformToRange(float x, float oldMin, float oldMax, float newMin, f
     return (x - oldMin) * ((newMax - newMin) / (oldMax - oldMin)) + newMin;
 }
 
-animation FractalOscillatingRectangles= glsl(myShader, 256, 256);
+animation Fractal_Oscillating_Rectangles= glsl(myShader, 512, 512);
 
