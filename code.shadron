@@ -1,70 +1,75 @@
+#include <hsv>
+
 glsl struct NextRect {
-    vec2 start;
-    vec2 end;
-    bool horzLine; // If true, rectangle will be divided into next 2 by a horizontal line.
-    float timeOffset;
-    int depth;
+    vec2 start; // Bottom left corner coordinates
+    vec2 end; // Top right corner coordinates
+    bool horzLine; // If true, rectangle will be divided into next 2 by a horizontal line. Vertical otherwise.
+    float timeOffset; // 1.0 or 0.0, depending on wheter global time offset should (1) or shouldn't (0) be applied to this line.
+    int depth; // recursion level. [0, 7] for depth = 8.
 };
 
-//glsl vec4 drawLine(vec2 position, vec2 start, vec2 end, int depth, float sinTime);
 glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRect);
 glsl float sinCustom(float x);
-glsl float sinCustom(float x, float treshold);
 glsl float transformToRange(float x, float oldMin, float oldMax, float newMin, float newMax);
 
-const vec4 ORANGE = vec4(1.0, 0.5, 0.0, 1.0);
-const vec4 WHITE = vec4(0.9);
-const vec4 BLACK = vec4(0.0, 0.0, 0.0, 1.0);
-
 param float lineWidthMax = 0.015;
-//param float lineWidthMin = 0.002;
-param float tresholdGlobal = 0.1 : range(0.0, 0.5);
-param float amplitudeOffset = 3.1; // 3.1 aproximately equals to half sin period
-param float maxDepth = 8;
-param vec4 colorBG = ORANGE : color;
+/* min/max Amplitude:
+ * Min/max values to reduce line movement amplitude by. If amplitude is reduced by 0.2,
+ * lines will move between [0.2, 0.8] of their original amplitude. [0.0, 1.0] amplitude
+ * means that lines will move from edge to edge.
+*/
+param float minAmplitude = 0.3 : range(0.0, 0.5);
+param float maxAmplitude = 0.01 : range(0.0, 0.5);
+
+param float timeOffsetGlobal = 4; // Time offset for opposite lines. 3.1 aproximately equals to half period.
+param float minSpeed = 0.5; // Speed for biggest line / 0th recursion level
+param float speedMultiplier = 1.35; // Nth-depth line speed = minSpeed * speedMultiplier^N
+
+const float maxDepth = 8.0; // Recursive depth. Always change float and int values together!
+const int maxDepth_int = 8;
+
+param vec4 colorBG = vec4(1.0) : color;
+param vec4 colorLine = vec4(0.0, 0.0, 0.0, 1.0) : color;
+const vec4 colorError = vec4(1.0, 0.5, 0.0, 1.0);
 
 glsl vec4 myShader(vec2 position, float time) {
-    NextRect[10] queue;
+    NextRect[maxDepth_int + 1] queue;
     queue[0] = NextRect(vec2(0.0), vec2(1.0), false, 0.0, 0);
 
-    // From the queue
-    for (int i = 0; i < 8; i++) {
-        //return drawLine(position, queue[i].start, queue[i].end, queue[i].depth, time);
+    for (int i = 0; i < maxDepth_int; i++) {
         vec4 val = drawLine(position, queue[i], time, queue[i + 1]);
-        if (val == BLACK)
-            return BLACK;
+        if (val != colorBG)
+            return val;
     }
-
-    return WHITE;
+    return colorBG;
 }
 
-/* Calculates color for one specified rectangle/split i.e. 2 rectangles and
+/* Calculates color for one specified rectangle split i.e. 2 rectangles and
  * a line splitting them.
  *
  * Parameters:
  * position - pixel position
- * rect - NextRect structure, specifiying more parameters for this split: start and end global
- *        positions, if it's horizontal or vertical split, if timing should be offset, and depth level.
+ * rect - NextRect structure, specifiying more parameters for this split: start and end positions,
+ *        if it's horizontal or vertical split, if timing should be offset, and depth level.
  *
  * Returns:
- * ORANGE if position is not inside given square
- * BLACK if position is on line
- * WHITE otherwise
+ * colorError if position is not inside given square
+ * colorLine if position is on line
+ * colorBG otherwise
  */
 glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRect) {
     // REMOVE CHECKING IF INSIDE
     if (position.x < rect.start.x || position.y < rect.start.y || position.x > rect.end.x || position.y > rect.end.y) {
         // Not in the square
-        return ORANGE;        
+        return colorError;        
     } else {
         // In the square
 
         if (rect.horzLine) {
-            float tresholdLocal = (rect.end.y - rect.start.y) * tresholdGlobal;
-            float sinLocal = transformToRange(sinCustom(time + amplitudeOffset * rect.timeOffset), 0.0, 1.0, rect.start.y + tresholdLocal, rect.end.y - tresholdLocal);
+            float tresholdLocal = (rect.end.y - rect.start.y) * ((minAmplitude - maxAmplitude) * (1 - rect.depth / maxDepth) + maxAmplitude);
+            float timeLocal = (time + timeOffsetGlobal * rect.timeOffset) * minSpeed * pow(speedMultiplier, rect.depth);
+            float sinLocal = transformToRange(sinCustom(timeLocal), 0.0, 1.0, rect.start.y + tresholdLocal, rect.end.y - tresholdLocal);
 
-            /* REPLACE WITH STEP FUNCTION
-            vec2 newStart = vec2(rect.start.x, step(sinLocal, position.y) * rect.start.y*/
             vec2 newStart, newEnd;
             float newTimeOffset;
             if (position.y > sinLocal) { // Top
@@ -76,22 +81,18 @@ glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRe
                 newEnd = vec2(rect.end.x, sinLocal);
                 newTimeOffset = 1.0;
             }
-
             nextRect = NextRect(newStart, newEnd, !rect.horzLine, newTimeOffset, rect.depth + 1);
 
-            //float halfLineLocal = ((lineWidthMax - lineWidthMin) * (1 - rect.depth / maxDepth) * 0.5) + lineWidthMin;
             float halfLineLocal = lineWidthMax * (1 - rect.depth / maxDepth) * 0.5;
-
-
             if (position.y > sinLocal - halfLineLocal && position.y < sinLocal + halfLineLocal)
-                return BLACK;        
-            return WHITE;
+                //return vec4(hsv(position.x, 1.0, 1.0), 1.0);
+                return colorLine;
+            return colorBG;
         } else {
-            float tresholdLocal = (rect.end.x - rect.start.x) * tresholdGlobal;
-            float sinLocal = transformToRange(sinCustom(time + amplitudeOffset * rect.timeOffset), 0.0, 1.0, rect.start.x + tresholdLocal, rect.end.x - tresholdLocal);
+            float tresholdLocal = (rect.end.x - rect.start.x) * ((minAmplitude - maxAmplitude) * (1 - rect.depth / maxDepth) + maxAmplitude);
+            float timeLocal = (time + timeOffsetGlobal * rect.timeOffset) * minSpeed * pow(speedMultiplier, rect.depth);
+            float sinLocal = transformToRange(sinCustom(timeLocal), 0.0, 1.0, rect.start.x + tresholdLocal, rect.end.x - tresholdLocal);
 
-            /* REPLACE WITH STEP FUNCTION
-            vec2 newStart = vec2(rect.start.x, step(sinLocal, position.y) * rect.start.y*/
             vec2 newStart, newEnd;
             float newTimeOffset;
             if (position.x > sinLocal) { // Right
@@ -103,40 +104,23 @@ glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRe
                 newEnd = vec2(sinLocal, rect.end.y);
                 newTimeOffset = 0.0;
             }
-
             nextRect = NextRect(newStart, newEnd, !rect.horzLine, newTimeOffset, rect.depth + 1);
 
-            //float halfLineLocal = ((lineWidthMax - lineWidthMin) * (1 - rect.depth / maxDepth) * 0.5) + lineWidthMin;
             float halfLineLocal = lineWidthMax * (1 - rect.depth / maxDepth) * 0.5;
-
             if (position.x > sinLocal - halfLineLocal && position.x < sinLocal + halfLineLocal)
-                return BLACK;        
-            return WHITE;
+                //return vec4(hsv(position.x, 1.0, 1.0), 1.0);
+                return colorLine;
+            return colorBG;
         }
-
     }
-
-    // and then draw inside of each 4 squares...
-
-    // 2 DIMENSIONAL ARRAYS!!! Each call fills array of squares to draw inside of it, if depth is not max!
-    // Each call returns sizes for 2 smaller calls
-    //     A structure:
-    //      end pos, start pos, direction, current color
 }
 
-/* A sine wave function that returns positive only wave, between [0.0, 1.0], 
- * adjusted for specified treshold. Treshold specifies difference between min
- * and max values.
- * For example, with a treshold of 0.8, values returned will be between [0.1, 0.9]
- */
-glsl float sinCustom(float x, float treshold) {
-    return ((sin(x) + 1.0) / 2.0) * treshold + (1 - treshold) / 2;
-}
+// A sine function that returns positive only wave, between [0.0, 1.0].
 glsl float sinCustom(float x) {
     return (sin(x) + 1.0) / 2.0;
 }
-/* Transforms value from one range to a different range. For example, can
- * be used to value varying between [0.5, 1.5] to new range [0.632, 0.815].
+/* Transforms value from one range to a different range. For example, can be used
+ * to transform value varying between [0.5, 1.5] to new range [0.632, 0.815].
  */
 glsl float transformToRange(float x, float oldMin, float oldMax, float newMin, float newMax) {   
     /* Formula:
@@ -147,4 +131,3 @@ glsl float transformToRange(float x, float oldMin, float oldMax, float newMin, f
 }
 
 animation Fractal_Oscillating_Rectangles= glsl(myShader, 512, 512);
-
