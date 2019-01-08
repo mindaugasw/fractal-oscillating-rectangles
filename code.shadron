@@ -25,6 +25,10 @@ param float timeOffsetGlobal = 4; // Time offset for opposite lines. 3.1 aproxim
 param float minSpeed = 0.5; // Speed for biggest line / 0th recursion level
 param float speedMultiplier = 1.35; // Nth-depth line speed = minSpeed * speedMultiplier^N
 
+param bool pride;
+param float maxSV = 1.0;
+param float minSV = 0.5;
+
 const float maxDepth = 8.0; // Recursive depth. Always change float and int values together!
 const int maxDepth_int = 8;
 
@@ -84,9 +88,13 @@ glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRe
             nextRect = NextRect(newStart, newEnd, !rect.horzLine, newTimeOffset, rect.depth + 1);
 
             float halfLineLocal = lineWidthMax * (1 - rect.depth / maxDepth) * 0.5;
-            if (position.y > sinLocal - halfLineLocal && position.y < sinLocal + halfLineLocal)
-                //return vec4(hsv(position.x, 1.0, 1.0), 1.0);
+            if (position.y > sinLocal - halfLineLocal && position.y < sinLocal + halfLineLocal) {
+                if (pride) {
+                    float sv = (maxSV - minSV) * (1 - rect.depth / maxDepth) + minSV;
+                    return vec4(hsv(position.x, sv, sv), 1.0);
+                }
                 return colorLine;
+            }
             return colorBG;
         } else {
             float tresholdLocal = (rect.end.x - rect.start.x) * ((minAmplitude - maxAmplitude) * (1 - rect.depth / maxDepth) + maxAmplitude);
@@ -107,9 +115,13 @@ glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRe
             nextRect = NextRect(newStart, newEnd, !rect.horzLine, newTimeOffset, rect.depth + 1);
 
             float halfLineLocal = lineWidthMax * (1 - rect.depth / maxDepth) * 0.5;
-            if (position.x > sinLocal - halfLineLocal && position.x < sinLocal + halfLineLocal)
-                //return vec4(hsv(position.x, 1.0, 1.0), 1.0);
+            if (position.x > sinLocal - halfLineLocal && position.x < sinLocal + halfLineLocal) {
+                if (pride) {
+                    float sv = (maxSV - minSV) * (1 - rect.depth / maxDepth) + minSV;
+                    return vec4(hsv(position.x, sv, sv), 1.0);
+                }
                 return colorLine;
+            }
             return colorBG;
         }
     }
