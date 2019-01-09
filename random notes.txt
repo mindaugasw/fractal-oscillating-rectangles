@@ -1,0 +1,14 @@
+smoothstep(a, b, x) - x = value. Returns % at which is x between [a, b].
+mix(a, b, x) - x = % of way between [a, b]. Returns value at that %.
+
+smoothstep - give value, get percentage.
+mix - give percentage, get value.
+
+1st line width: 0.015
+
+TresholdLocal = dist from edge
+depth 0:
+total height * ampDiff * (1 - 0/8) = 0.3
+
+depth 8:
+total height * ampDiff * (1 - 8/8) = minAmplitude = 0.0
