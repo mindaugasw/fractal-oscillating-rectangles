@@ -33,19 +33,22 @@ const float maxDepth = 8.0; // Recursive depth. Always change float and int valu
 const int maxDepth_int = 8;
 
 param vec4 colorBG = vec4(1.0) : color;
-param vec4 colorLine = vec4(0.0, 0.0, 0.0, 1.0) : color;
+const vec4 colorLine = vec4(0.0, 0.0, 0.0, 1.0) : color;
 const vec4 colorError = vec4(1.0, 0.5, 0.0, 1.0);
 
 glsl vec4 myShader(vec2 position, float time) {
     NextRect[maxDepth_int + 1] queue;
     queue[0] = NextRect(vec2(0.0), vec2(1.0), false, 0.0, 0);
 
+    vec4 prevColor = colorBG;
     for (int i = 0; i < maxDepth_int; i++) {
-        vec4 val = drawLine(position, queue[i], time, queue[i + 1]);
-        if (val != colorBG)
-            return val;
+        vec4 newVal = drawLine(position, queue[i], time, queue[i + 1]);        
+        prevColor = min(prevColor, newVal);
+        
+        /*if (val != colorBG)
+            return val;*/
     }
-    return colorBG;
+    return prevColor;
 }
 
 /* Calculates color for one specified rectangle split i.e. 2 rectangles and
