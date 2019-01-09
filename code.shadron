@@ -3,7 +3,7 @@
 glsl struct NextRect {
     vec2 start; // Bottom left corner coordinates
     vec2 end; // Top right corner coordinates
-    bool horzLine; // If true, rectangle will be divided into next 2 by a horizontal line. Vertical otherwise.
+    float horzLine; // If 1.0 (true), rectangle will be divided into next 2 by a horizontal line. Vertical otherwise (0.0).
     float timeOffset; // 1.0 or 0.0, depending on wheter global time offset should (1) or shouldn't (0) be applied to this line.
     int depth; // recursion level. [0, 7] for depth = 8.
 };
@@ -15,9 +15,10 @@ glsl float transformToRange(float x, float oldMin, float oldMax, float newMin, f
 param float lineWidthMax = 0.015;
 /* min/max Amplitude:
  * Min/max values to reduce line movement amplitude by. If amplitude is reduced by 0.2,
- * lines will move between [0.2, 0.8] of their original amplitude. [0.0, 1.0] amplitude
- * means that lines will move from edge to edge.
-*/
+ * lines will move between [0.2, 0.8] of their original amplitude (distance from one edge to
+ * another of current rectangle). [0.0, 1.0] amplitude means that lines will move all the way
+ * from edge to edge.
+ */
 param float minAmplitude = 0.3 : range(0.0, 0.5);
 param float maxAmplitude = 0.01 : range(0.0, 0.5);
 
@@ -25,7 +26,7 @@ param float timeOffsetGlobal = 4; // Time offset for opposite lines. 3.1 aproxim
 param float minSpeed = 0.5; // Speed for biggest line / 0th recursion level
 param float speedMultiplier = 1.35; // Nth-depth line speed = minSpeed * speedMultiplier^N
 
-param bool pride;
+param float rainbow = 0.0;
 param float maxSV = 1.0;
 param float minSV = 0.5;
 
@@ -34,21 +35,22 @@ const int maxDepth_int = 8;
 
 param vec4 colorBG = vec4(1.0) : color;
 const vec4 colorLine = vec4(0.0, 0.0, 0.0, 1.0) : color;
-const vec4 colorError = vec4(1.0, 0.5, 0.0, 1.0);
+//const vec4 colorError = vec4(1.0, 0.5, 0.0, 1.0);
 
 glsl vec4 myShader(vec2 position, float time) {
+    /* Because recursion is not possible, artificial recursion is created: every call of drawLine
+     * adds next rectangle (inside current one) to calculate to the queue.
+     */
     NextRect[maxDepth_int + 1] queue;
-    queue[0] = NextRect(vec2(0.0), vec2(1.0), false, 0.0, 0);
+    queue[0] = NextRect(vec2(0.0), vec2(1.0), 0.0, 0.0, 0);
 
     vec4 prevColor = colorBG;
     for (int i = 0; i < maxDepth_int; i++) {
-        vec4 newVal = drawLine(position, queue[i], time, queue[i + 1]);        
+        vec4 newVal = drawLine(position, queue[i], time, queue[i + 1]);
         prevColor = min(prevColor, newVal);
-        
-        /*if (val != colorBG)
-            return val;*/
     }
     return prevColor;
+    // Darkest color is always the final result. Thus line color must always be darker than BG.
 }
 
 /* Calculates color for one specified rectangle split i.e. 2 rectangles and
@@ -60,19 +62,91 @@ glsl vec4 myShader(vec2 position, float time) {
  *        if it's horizontal or vertical split, if timing should be offset, and depth level.
  *
  * Returns:
- * colorError if position is not inside given square
  * colorLine if position is on line
  * colorBG otherwise
  */
 glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRect) {
-    // REMOVE CHECKING IF INSIDE
-    if (position.x < rect.start.x || position.y < rect.start.y || position.x > rect.end.x || position.y > rect.end.y) {
+    // Checking if given position is actually inside given rectangle
+    /*if (position.x < rect.start.x || position.y < rect.start.y || position.x > rect.end.x || position.y > rect.end.y) {
         // Not in the square
         return colorError;        
-    } else {
+    } else {*/
         // In the square
 
-        if (rect.horzLine) {
+    /* isHorz and isVert are used in calculations to determine if a split should be horizontal
+     * or vertical. Values represent bool values and can be 1.0 or 0.0.
+     * All of this is used to prevent branching with if statements.
+     * Any axis-dependent values further down are calculated the same way:
+     * float someVal = calculationsForHorz * isHorz +
+     *                 calculationsForVert * isVert;
+     */
+    float isHorz = step(0.5, rect.horzLine);
+    float isVert = 1.0 - isHorz;
+
+    /* tresholdLocal - specifies how close to rectangle edge this line can come at max position
+     * (sets amplitude for line movement). Formula:
+     * total section width * line movement amplitude for this recursion level
+     */
+    float tresholdLocal = ((rect.end.y - rect.start.y) * isHorz + (rect.end.x - rect.start.x) * isVert) * 
+        ((minAmplitude - maxAmplitude) * (1 - rect.depth / maxDepth) + maxAmplitude);
+    
+    // Calculates input for sin function: adds up global time, time offset, and line speed for this recursion level.
+    float timeLocal = (time + timeOffsetGlobal * rect.timeOffset) * minSpeed * pow(speedMultiplier, rect.depth);
+    // X/Y position of line middle.
+    float sinLocal = transformToRange(sinCustom(timeLocal), 0.0, 1.0,
+        (rect.start.y * isHorz + rect.start.x * isVert) + tresholdLocal,
+        (rect.end.y * isHorz + rect.end.x * isVert) - tresholdLocal);
+    
+    // Calculates properties for rectangle in next recursion level
+    vec2 newStart, newEnd;
+    float newTimeOffset;
+    if ((position.y * isHorz + position.x * isVert) > sinLocal) { // Top / Right
+        newStart = vec2(rect.start.x * isHorz + sinLocal * isVert, sinLocal * isHorz + rect.start.y * isVert);
+        newEnd = vec2(rect.end.x, rect.end.y); // Calculation is same for X/Y
+        newTimeOffset = isVert;
+    } else { // Bottom / Left
+        newStart = vec2(rect.start.x, rect.start.y); // Calculation is same for X/Y
+        newEnd = vec2(rect.end.x * isHorz + sinLocal * isVert, sinLocal * isHorz + rect.end.y * isVert);
+        newTimeOffset = isHorz;
+    }
+    nextRect = NextRect(newStart, newEnd, 1.0 - rect.horzLine, newTimeOffset, rect.depth + 1);
+
+    // Checking if current position is on the line
+    // Half line width/height 
+    // ?????????????????????????????????? SHOULD BE JUST 1 (INT) BELOW??????????????????????????????
+    float halfLineLocal = lineWidthMax * (1.0 - rect.depth / maxDepth) * 0.5;
+    float posLocal = position.y * isHorz + position.x * isVert;
+    
+    float onLine1 = 1.0 - step(sinLocal - halfLineLocal, posLocal); // 0.0 if on line
+    float onLine2 = step(sinLocal + halfLineLocal, posLocal); // 0.0 if on line
+    float isOnLine = 1.0 - step(0.5, onLine1 + onLine2); // 1.0 if on line
+
+    // Color calculation
+    float rainbowBin = step(0.5, rainbow); // Rainbow binary
+    float hSV = ((maxSV - minSV) * (1 - rect.depth / maxDepth) + minSV) * isOnLine * rainbowBin; // Rainbow line // S and V values of HSV
+    return (colorLine * isOnLine * (1.0 - rainbowBin)) + // Black line        
+        vec4(hsv(position.x, hSV, hSV), 1.0 * isOnLine * rainbowBin) + // Rainbow line
+        colorBG * (1.0 - isOnLine); // Not on line
+
+    /*if (posLocal > sinLocal - halfLineLocal && posLocal < sinLocal + halfLineLocal) {
+
+        rainbow = step(0.5, rainbow);
+
+
+        if (pride) {
+            float hSV = (maxSV - minSV) * (1 - rect.depth / maxDepth) + minSV;
+            float hSV = (maxSV - minSV) * (1 - rect.depth / maxDepth) + minSV;
+            return vec4(hsv(position.x, hSV, hSV), 1.0);
+        }
+        return colorLine;
+
+    }
+    return colorBG;*/
+
+
+
+        // OLD SECTION 
+        /*if (rect.horzLine) {
             float tresholdLocal = (rect.end.y - rect.start.y) * ((minAmplitude - maxAmplitude) * (1 - rect.depth / maxDepth) + maxAmplitude);
             float timeLocal = (time + timeOffsetGlobal * rect.timeOffset) * minSpeed * pow(speedMultiplier, rect.depth);
             float sinLocal = transformToRange(sinCustom(timeLocal), 0.0, 1.0, rect.start.y + tresholdLocal, rect.end.y - tresholdLocal);
@@ -126,8 +200,9 @@ glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRe
                 return colorLine;
             }
             return colorBG;
-        }
-    }
+        }*/
+        // OLD SECTION
+    //}
 }
 
 // A sine function that returns positive only wave, between [0.0, 1.0].
