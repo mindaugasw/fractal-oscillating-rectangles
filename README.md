@@ -7,4 +7,4 @@ Project to learn shaders. Made with GLSL, playable with [Shadron](https://www.ar
 [Demo](https://giant.gfycat.com/UnfortunateFantasticAfricanpiedkingfisher.webm)  
 [Properties showcase](https://www.youtube.com/watch?v=IX-bLb6rUeY)
 
-![Fractal Oscillating Rectangles](https://i.imgur.com/GG5MEG8.png "Fractal Oscillating Rectangles")
+![Fractal Oscillating Rectangles](https://i.imgur.com/zVsHF6t.gif "Fractal Oscillating Rectangles")
