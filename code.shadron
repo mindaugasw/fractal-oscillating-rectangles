@@ -26,18 +26,18 @@ param float timeOffsetGlobal = 4; // Time offset for opposite lines. 4 seems to 
 param float minSpeed = 0.5; // Speed for biggest line / 0th recursion level
 param float speedMultiplier = 1.35; // Nth-depth line speed = minSpeed * speedMultiplier^N
 
-param float rainbow = 0.0; // Acts as bool (0.0 or 1.0).
+param float rainbow = 0.0; // Rainbow enable/disable
 param float maxSV = 1.0; // Color config for rainbow lines.
 param float minSV = 0.5;
 
-const float maxDepth = 8.0; // Recursive depth. Always change float and int values together!
+const float maxDepth = 8.0; // Recursive depth. Change float and int values together.
 const int maxDepth_int = 8;
 
 param vec4 colorBG = vec4(1.0) : color;
 const vec4 colorLine = vec4(0.0, 0.0, 0.0, 1.0) : color;
 
 glsl vec4 myShader(vec2 position, float time) {
-    /* Because recursion is not possible, artificial recursion is created: every call of drawLine
+    /* Because recursion is not possible, artificial recursion is used: every call of drawLine
      * adds next rectangle (inside current one) to calculate to the queue.
      */
     NextRect[maxDepth_int + 1] queue;
@@ -57,8 +57,7 @@ glsl vec4 myShader(vec2 position, float time) {
  *
  * Parameters:
  * position - pixel position.
- * rect - NextRect structure, specifiying more parameters for this split: start and end positions,
- *        if it's horizontal or vertical split, if timing should be offset, and depth level.
+ * rect - NextRect structure, specifiying more parameters for this split.
  * time - global time.
  * out nextRect - properties for deeper recursion level will be set to this structure.
  *
@@ -68,9 +67,8 @@ glsl vec4 myShader(vec2 position, float time) {
  */
 glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRect) {
     /* isHorz and isVert are used in calculations to determine if a split should be horizontal
-     * or vertical. Values represent bool values and can be 1.0 or 0.0.
-     * All of this is used to prevent branching with if statements.
-     * Any axis-dependent values further down are calculated the same way:
+     * or vertical. Made to be used instead of IF's.
+     *
      * float someVal = calculationsForHorz * isHorz +
      *                 calculationsForVert * isVert;
      */
@@ -78,7 +76,7 @@ glsl vec4 drawLine(vec2 position, NextRect rect, float time, out NextRect nextRe
     float isVert = 1.0 - isHorz;
 
     /* tresholdLocal - specifies how close to rectangle edge this line can come at max position
-     * (sets amplitude for line movement). Formula:
+     * (sets amplitude for line movement).
      * total section width * line movement amplitude for this recursion level
      */
     float tresholdLocal = ((rect.end.y - rect.start.y) * isHorz + (rect.end.x - rect.start.x) * isVert) * 

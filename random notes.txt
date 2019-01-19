@@ -1,6 +1,3 @@
-smoothstep(a, b, x) - x = value. Returns % at which is x between [a, b].
-mix(a, b, x) - x = % of way between [a, b]. Returns value at that %.
-
 smoothstep - give value, get percentage.
 mix - give percentage, get value.
 
